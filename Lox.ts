@@ -1,5 +1,7 @@
 import * as fs from "fs";
 import * as readline from "readline";
+import { createScanner, Scanner } from "./Scanner";
+import { Token } from "./Token";
 
 function main(args: string[]): void {
   if (args.length > 1) {
@@ -45,7 +47,7 @@ function runPrompt() {
 }
 
 function run(source: string) {
-  const scanner: = new Scanner(source);
+  const scanner: Scanner = createScanner(source);
   const tokens: Token[] = scanner.scanTokens();
 
   for (const token of tokens) {

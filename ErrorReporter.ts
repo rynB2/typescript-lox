@@ -5,7 +5,7 @@ interface ErrorReporter {
   clear: () => void;
 }
 
-const createErrorReporter = (): ErrorReporter => {
+export const createErrorReporter = (): ErrorReporter => {
   const reporter: ErrorReporter = {
     hadError: false,
     report: (line: number, where: string, message: string) => {
@@ -21,5 +21,3 @@ const createErrorReporter = (): ErrorReporter => {
   };
   return reporter;
 };
-
-export const errorReporter = createErrorReporter();
