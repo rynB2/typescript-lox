@@ -2,6 +2,26 @@ import { Token } from "./Token";
 import { TokenType } from "./TokenType";
 import { createErrorReporter } from "./ErrorReporter";
 
+// in ts, property keys are strings, so explicit "" is not needed
+const KEYWORDS: Record<string, TokenType> = {
+  and: TokenType.AND,
+  class: TokenType.CLASS,
+  else: TokenType.ELSE,
+  false: TokenType.FALSE,
+  for: TokenType.FOR,
+  fun: TokenType.FUN,
+  if: TokenType.IF,
+  nil: TokenType.NIL,
+  or: TokenType.OR,
+  print: TokenType.PRINT,
+  return: TokenType.RETURN,
+  super: TokenType.SUPER,
+  this: TokenType.THIS,
+  true: TokenType.TRUE,
+  var: TokenType.VAR,
+  while: TokenType.WHILE,
+} as const;
+
 const errorReporter = createErrorReporter();
 
 export interface Scanner {
@@ -17,6 +37,19 @@ export const createScanner = (source: string): Scanner => {
 
   const isAtEnd = (): boolean => current >= source.length;
 
+  const isDigit = (c: string): boolean => {
+    return c >= "0" && c <= "9";
+  };
+
+  const isAlpha = (c: string): boolean => {
+    return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
+  };
+
+  const isAlphaNumeric = (c: string): boolean => {
+    return isAlpha(c) || isDigit(c);
+  };
+
+  // returns current char, THEN moves current forward
   const advance = (): string => source.charAt(current++);
 
   const peek = (): string => {
@@ -24,16 +57,21 @@ export const createScanner = (source: string): Scanner => {
     return source.charAt(current);
   };
 
+  const peekNext = (): string => {
+    if (current + 1 >= source.length) return "\0";
+    return source.charAt(current + 1);
+  };
+
   const match = (expected: string): boolean => {
     if (isAtEnd()) return false;
-    if (source.charAt(current) != expected) return false;
+    if (source.charAt(current) !== expected) return false;
     current++;
     return true;
   };
 
-  const string = (): void => {
-    while (peek() != '"' && !isAtEnd()) {
-      if (peek() == "\n") {
+  const handleString = (): void => {
+    while (peek() !== '"' && !isAtEnd()) {
+      if (peek() === "\n") {
         // handle multi-line string edge case
         line++;
       }
@@ -53,25 +91,35 @@ export const createScanner = (source: string): Scanner => {
     addToken(TokenType.STRING, value);
   };
 
-  const number = (): void => {
-    while (isDigit(peek())) advance();
-
-    // look for a fractional part
-    if (peek() == "." && isDigit(peekNext())) {
-      // consume the "."
+  const handleNumber = (): void => {
+    while (isDigit(peek())) {
       advance();
-      while (isDigit(peek())) advance();
     }
 
-    const text = addToken(
-      TokenType.NUMBER,
-      Number(source.substring(start, current)),
-    );
+    // look for a fractional part
+    if (peek() === "." && isDigit(peekNext())) {
+      // consume the "."
+      advance();
+      while (isDigit(peek())) {
+        advance();
+      }
+    }
+
+    addToken(TokenType.NUMBER, Number(source.substring(start, current)));
+  };
+
+  const handleIdentifier = (): void => {
+    while (isAlphaNumeric(peek())) {
+      advance();
+    }
+    const text = source.substring(start, current);
+    let type: TokenType = KEYWORDS[text] ?? TokenType.IDENTIFIER;
+    addToken(type);
   };
 
   const addToken = (type: TokenType, literal: unknown = null): void => {
     const text = source.substring(start, current);
-    tokens.push({ type: type, lexeme: text, literal: literal, line: line });
+    tokens.push({ type, lexeme: text, literal, line });
   };
 
   const scanToken = (): void => {
@@ -109,8 +157,49 @@ export const createScanner = (source: string): Scanner => {
       case "*":
         addToken(TokenType.STAR);
         break;
+      // one or two chars
+      case "!":
+        addToken(match("=") ? TokenType.BANG_EQUAL : TokenType.BANG);
+        break;
+      case "=":
+        addToken(match("=") ? TokenType.EQUAL_EQUAL : TokenType.EQUAL);
+        break;
+      case "<":
+        addToken(match("=") ? TokenType.LESS_EQUAL : TokenType.LESS);
+        break;
+      case ">":
+        addToken(match("=") ? TokenType.GREATER_EQUAL : TokenType.GREATER);
+        break;
+      case "/":
+        if (match("/")) {
+          while (peek() !== "\n" && !isAtEnd()) {
+            advance();
+          }
+        } else {
+          addToken(TokenType.SLASH);
+        }
+        break;
+      // skip over newlines/whitespace
+      case " ":
+      case "\r":
+      case "\t":
+        break;
+      case "\n":
+        line++;
+        break;
+      // strings
+      case '"':
+        handleString();
+        break;
       default:
-        errorReporter.error(line, "Unexpected character.");
+        if (isDigit(c)) {
+          handleNumber();
+        } else if (isAlpha(c)) {
+          handleIdentifier();
+        } else {
+          errorReporter.error(line, "Unexpected character.");
+        }
+
         break;
     }
   };
@@ -125,7 +214,7 @@ export const createScanner = (source: string): Scanner => {
       type: TokenType.EOF,
       lexeme: "",
       literal: null,
-      line: line,
+      line,
     });
 
     return tokens;
