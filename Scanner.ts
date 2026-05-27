@@ -117,6 +117,27 @@ export const createScanner = (source: string): Scanner => {
     addToken(type);
   };
 
+  const handleBlockComment = (): void => {
+    while (!isAtEnd()) {
+      // handle newlines
+      if (peek() === "\n") {
+        line++;
+      }
+
+      // comment end -- consume both characters, then finish
+      if (peek() === "*" && peekNext() === "/") {
+        advance();
+        advance();
+        return;
+      }
+
+      // continue to consume the comment block if not finished
+      advance();
+    }
+
+    errorReporter.error(line, "Unterminated block comment.");
+  };
+
   const addToken = (type: TokenType, literal: unknown = null): void => {
     const text = source.substring(start, current);
     tokens.push({ type, lexeme: text, literal, line });
@@ -170,11 +191,14 @@ export const createScanner = (source: string): Scanner => {
       case ">":
         addToken(match("=") ? TokenType.GREATER_EQUAL : TokenType.GREATER);
         break;
+      // comments
       case "/":
         if (match("/")) {
           while (peek() !== "\n" && !isAtEnd()) {
             advance();
           }
+        } else if (match("*")) {
+          handleBlockComment();
         } else {
           addToken(TokenType.SLASH);
         }
